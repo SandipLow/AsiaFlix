@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 
+import path from "path";
 import cors from "cors";
 import express from "express";
 import { createServer } from "http";
@@ -34,6 +35,7 @@ app.use((req, res, next) => {
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.use("/uploads", express.static("uploads"))
+app.use(express.static(path.join(__dirname, 'public')))
 
 app.get("/", (req, res) => {
     res.send("Hello World");
@@ -47,3 +49,5 @@ app.use("/video", VideoRoutes);
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+export default app;

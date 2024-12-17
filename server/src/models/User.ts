@@ -1,82 +1,114 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, updateDoc, query, where, getDocs } from "firebase/firestore"
-import { db } from "../services/firebase"
-import bcrypt from "bcrypt"
+import { supabase } from '../services/superbase';
+import bcrypt from 'bcrypt';
 
-const collectionRef = "Users"
-const likeCollectionRef = "Likes"
+
+const userTable = 'Users';
+const likeTable = 'Likes';
 
 interface UserData {
-    userName: string
-    password: string
-    email: string
-    role: string | null
-    dob: string
-    phone: string
-    address: string
+    userName: string;
+    password: string;
+    email: string;
+    role: string | null;
+    dob: string;
+    phone: string;
+    address: string;
 }
 
 export default class User {
     constructor() {}
 
     static async getUserByEmail(email: string) {
-        const q = query(collection(db, collectionRef), where("email", "==", email))
+        const { data, error } = await supabase
+            .from(userTable)
+            .select('*')
+            .eq('email', email)
+            .single();
 
-        const res = await getDocs(q)
-
-        if (res.empty) {
-            return null
+        if (error && error.code === 'PGRST116') {
+            // No rows returned
+            return null;
+        } else if (error) {
+            throw error;
         }
 
-        return { id: res.docs[0].id, ...res.docs[0].data() as UserData }
-        
+        return data as UserData & { id: string };
     }
 
     static async createUser(userData: UserData) {
-        // check if user already exists
-        const user = await this.getUserByEmail(userData.email)
+        // Check if user already exists
+        const user = await this.getUserByEmail(userData.email);
 
         if (user) {
-            throw new Error("User already exists")
+            throw new Error('User already exists');
         }
 
-        // hash the password
-        const hashedPassword = await bcrypt.hash(userData.password, 10)
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(userData.password, 10);
 
-        const res = await addDoc(collection(db, collectionRef), {
-            ...userData,
-            password: hashedPassword
-        })
+        // Insert the user into the database
+        const { data, error } = await supabase
+            .from(userTable)
+            .insert({ ...userData, password: hashedPassword })
+            .select()
+            .single();
 
-        return res.id
+        if (error) {
+            throw error;
+        }
+
+        return data.id;
     }
 
     static async getUser(id: string) {
-        const res = await getDoc(doc(db, collectionRef, id))
+        const { data, error } = await supabase
+            .from(userTable)
+            .select('*')
+            .eq('id', id)
+            .single();
 
-        if (!res.exists()) {
-            return null
+        if (error && error.code === 'PGRST116') {
+            // No rows returned
+            return null;
+        } else if (error) {
+            throw error;
         }
 
-        return { id: res.id, ...res.data() as UserData }
+        return data as UserData;
     }
 
-    static async updateUser(id: string, userData: any) {
-        await updateDoc(doc(db, collectionRef, id), {
-            ...userData
-        });
+    static async updateUser(id: string, userData: Partial<UserData>) {
+        const { error } = await supabase
+            .from(userTable)
+            .update(userData)
+            .eq('id', id);
+
+        if (error) {
+            throw error;
+        }
     }
 
     static async deleteUser(id: string) {
-        await deleteDoc(doc(db, collectionRef, id))
+        const { error } = await supabase
+            .from(userTable)
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            throw error;
+        }
     }
 
-    static async getLikedVideos(id: string) {
-        const q = query(collection(db, likeCollectionRef), where("userId", "==", id))
+    static async getLikedVideos(userId: string) {
+        const { data, error } = await supabase
+            .from(likeTable)
+            .select('videoId')
+            .eq('userId', userId);
 
-        const res = await getDocs(q)
+        if (error) {
+            throw error;
+        }
 
-        const videos = res.docs.map((doc) => doc.data().videoId as string)
-
-        return videos
+        return data.map((item) => item.videoId);
     }
-} 
+}

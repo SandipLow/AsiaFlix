@@ -5,9 +5,10 @@
     "scripts": {
         "build": "npx tsc -b",
         "dev": "nodemon --ignore uploads/ src/index.ts",
-        "start": "node dist/index.js"
+        "start": "node api/index.js"
     },
     "dependencies": {
+        "@supabase/supabase-js": "^2.47.7",
         "@types/bcrypt": "^5.0.2",
         "@types/multer": "^1.4.12",
         "bcrypt": "^5.1.1",

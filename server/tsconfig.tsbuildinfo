@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/middlewares/fetchUser.ts","./src/middlewares/upload.ts","./src/models/User.ts","./src/models/Video.ts","./src/routes/User.ts","./src/routes/Video.ts","./src/services/firebase.ts","./src/services/superbase.ts"],"version":"5.7.2"}

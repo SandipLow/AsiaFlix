@@ -1,169 +1,168 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, updateDoc, where } from "firebase/firestore"
-import { db } from "../services/firebase"
+import { supabase } from "../services/superbase";
 
-const collectionRef = "Videos"
-const likeCollectionRef = "Likes"
+const videoTable = 'Videos';
+const likeTable = 'Likes';
 
 interface VideoData {
-    title: string
-    description: string
-    video: string
-    thumbnail: string
-    views: number
-    createdAt: number
-    genre: "action" | "comedy" | "horror" | "fantasy" | "drama" | "mystery" | "thriller" | "romance" | "science fiction"
+    title: string;
+    description: string;
+    video: string;
+    thumbnail: string;
+    views: number;
+    createdAt?: Date;
+    genre: "action" | "comedy" | "horror" | "fantasy" | "drama" | "mystery" | "thriller" | "romance" | "science fiction";
 }
 
 export default class Video {
     constructor() {}
 
-    static async getVideos(options? : { orderBy: string | null, order: "asc" | "desc" | null, genre: string | null }) {
-        let q = query(collection(db, collectionRef))
-        
-        if (options && options.orderBy && options.orderBy === "likes") {
-            // get videos by likes
-            const videoDocs = await getDocs(q);
+    static async getVideos(options?: { orderBy: string | null; order: "asc" | "desc" | null; genre: string | null }) {
+        const { orderBy, order, genre } = options || {};
 
-            const videos = await Promise.all(
-                videoDocs.docs.map(async (doc) => {
-                    const videoData = doc.data() as VideoData;
-                    const videoId = doc.id;
+        // handle orderBy = likes
+        if (orderBy === 'likes') {
+            const { data, error } = await supabase
+                .from(videoTable)
+                .select(`
+                    *,
+                    likes:Likes(
+                        userId,
+                        createdat
+                    )
+                `)
 
-                    // Query likes for this video
-                    const likesQuery = query(collection(db, "Likes"), where("videoId", "==", videoId));
-                    const likesSnapshot = await getDocs(likesQuery);
+            if (error) throw error;
 
-                    return {
-                        id: videoId,
-                        ...videoData,
-                        likes: likesSnapshot.size // Count of likes
-                    };
-                })
-            );
+            const res = data.sort((a, b) => {
+                if (order === 'asc') {
+                    return a.likes.length - b.likes.length;
+                } else {
+                    return b.likes.length - a.likes.length;
+                }
+            }).map(d=> ({...d, likes: d.likes.length}));
 
-            videos.sort((a, b) => {
-                const order = options.order === "desc" ? -1 : 1;
-                return (a.likes - b.likes) * order;
-            });
-
-            // limit to 10 videos
-            return videos.slice(0, 10);
-        }
-        
-        if (options && options.genre) {
-            q = query(q, where("genre", "==", options.genre))
+            return res;
         }
 
-        if (options && options.orderBy) {
-            q = query(q, orderBy(options.orderBy, options.order? options.order : "asc"))
+
+        const baseQuery = supabase.from(videoTable).select(`
+            *,
+            likes:Likes(
+                userId,
+                createdat
+            )
+        `)
+        
+        // Filter by genre
+        if (genre) {
+            baseQuery.eq('genre', genre);
         }
+        
+        // Order by
+        if (orderBy) {
+            baseQuery.order(orderBy, { ascending: order === 'asc' });
+        }
+        
+        const { data, error } = await baseQuery;
+
+        if (error) throw error;
+
+        return data;
 
         
-        const res = await getDocs(q)
-
-        return res.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data() as VideoData
-        }))
     }
 
     static async createVideo(videoData: VideoData) {
-        const res = await addDoc(collection(db, collectionRef), {
-            ...videoData
-        })
+        const { data, error } = await supabase.from(videoTable).insert(videoData).select().single();
+        if (error) throw error;
 
-        return res.id
+        return data.id;
     }
 
     static async getVideo(id: string) {
-        const res = await getDoc(doc(db, collectionRef, id))
+        const { data, error } = await supabase.from(videoTable).select('*').eq('id', id).single();
+        if (error) throw error;
 
-        if (!res.exists()) {
-            return null
-        }
-
-        return {
-            id: res.id,
-            ... res.data() as VideoData
-        }
+        return data;
     }
 
-    static async updateVideo(id: string, videoData: any) {
-        await updateDoc(doc(db, collectionRef, id), {
-            ...videoData
-        });
+    static async updateVideo(id: string, videoData: Partial<VideoData>) {
+        const { error } = await supabase.from(videoTable).update(videoData).eq('id', id);
+        if (error) throw error;
     }
 
     static async deleteVideo(id: string) {
-        await deleteDoc(doc(db, collectionRef, id))
+        const { error } = await supabase.from(videoTable).delete().eq('id', id);
+        if (error) throw error;
     }
 
     static async updateViews(id: string) {
-        const video = await this.getVideo(id)
+        const video = await this.getVideo(id);
 
-        if (!video) {
-            return
-        }
+        if (!video) return;
 
-        await this.updateVideo(id, {
-            views: video.views + 1
-        })
+        const { error } = await supabase
+            .from(videoTable)
+            .update({ views: video.views + 1 })
+            .eq('id', id);
+
+        if (error) throw error;
     }
 
     static async getVideosByGenre(genre: string) {
-        const q = query(collection(db, collectionRef), where("genre", "==", genre))
+        const { data, error } = await supabase.from(videoTable).select('*').eq('genre', genre);
+        if (error) throw error;
 
-        const res = await getDocs(q)
-
-        return res.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data() as VideoData
-        }))
+        return data;
     }
 
     static async getLikedVideos(userId: string) {
-        const q = query(collection(db, likeCollectionRef), where("userId", "==", userId))
+        const { data, error } = await supabase.from(likeTable).select('videoId').eq('userId', userId);
+        if (error) throw error;
 
-        const res = await getDocs(q)
-
-        return res.docs.map((doc) => doc.data().videoId)
+        return data.map((like) => like.videoId);
     }
 
     static async likeVideo(videoId: string, userId: string) {
-        const q = query(collection(db, likeCollectionRef), where("userId", "==", userId), where("videoId", "==", videoId))
+        const { data, error } = await supabase
+            .from(likeTable)
+            .select('*')
+            .eq('userId', userId)
+            .eq('videoId', videoId);
 
-        const res = await getDocs(q)
+        if (error) throw error;
 
-        if (!res.empty) {
-            // delete like
-            await deleteDoc(doc(db, likeCollectionRef, res.docs[0].id))
-            return
+        if (data.length > 0) {
+            // Unlike video
+            const { error: deleteError } = await supabase
+                .from(likeTable)
+                .delete()
+                .eq('id', data[0].id);
+
+            if (deleteError) throw deleteError;
+            return;
         }
 
-        await addDoc(collection(db, likeCollectionRef), {
-            userId,
-            videoId
-        })
+        // Like video
+        const { error: insertError } = await supabase
+            .from(likeTable)
+            .insert({ userId, videoId });
+
+        if (insertError) throw insertError;
     }
 
     static async getVideoLikes(videoId: string, userId: string | null) {
-        const q = query(collection(db, likeCollectionRef), where("videoId", "==", videoId))
+        const { data, error } = await supabase.from(likeTable).select('*').eq('videoId', videoId);
+        if (error) throw error;
 
-        const res = await getDocs(q)
-
-        const likes = res.docs.length
+        const likes = data.length;
 
         if (!userId) {
-            return { likes, userLiked: false }
+            return { likes, userLiked: false };
         }
 
-        for (const doc of res.docs) {
-            if (doc.data().userId === userId) {
-                return { likes, userLiked: true }
-            }
-        }
+        const userLiked = data.some((like) => like.userId === userId);
 
-        return { likes, userLiked: false }
+        return { likes, userLiked };
     }
-    
 }
