@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { AuthState } from '../types/auth';
 import { persist } from 'zustand/middleware';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = (import.meta.env.VITE_API_URL ??  'http://localhost:3000') as string;
 
 
 export const useAuthStore = create(persist<AuthState>((set) => ({

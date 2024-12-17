@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { Video, VideoState } from '../types/video';
 import { useAuthStore } from './authStore';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = (import.meta.env.VITE_API_URL ??  'http://localhost:3000') as string;
 
 export const useVideoStore = create<VideoState>(() => ({
     fetchVideos: async (options) => {
